@@ -1,0 +1,101 @@
+---
+title: "Dynamic Graph"
+author: "Adam Kiehl"
+date: "2022-09-28"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(plotly)
+library(ggthemes)
+library(htmlwidgets)
+```
+
+## Data
+
+```{r}
+# read in the data from a .csv file
+data <- read.csv('players.csv') %>%
+  # calculate average time on ice
+  mutate(ATOI = round(TOI / GP, 3)) %>%
+  # convert position to a factor
+  mutate(Pos = as.factor(Pos)) %>%
+  # remove empty rows
+  filter(Player != '') %>%
+  # remove non-standard positions
+  filter(!(Pos %in% c('F', 'W', 'G')))
+
+head(data)
+```
+
+## Plot
+
+```{r}
+# create team-aggregated data frame
+team_data <- data %>%
+  # remove players not affiliated with a specific team
+  filter(Team != 'TOT') %>%
+  # remove players with less than 10 games played
+  filter(GP > 10) %>%
+  # compute team-aggreagted statistics
+  group_by(Team) %>%
+  summarize(S = mean(S),
+            BLK = mean(BLK))
+
+plt <- ggplot() +
+  # add team data with highlight key
+  geom_point(data = highlight_key(team_data,
+                                  ~Team),
+             aes(x = BLK,
+                 y = S,
+                 group = Team),
+             alpha = .8) +
+  # add individual player data with highlight key
+  geom_point(data = highlight_key(data[which(data$GP > 10), ],
+                                  ~Team),
+             aes(x = BLK, 
+                 y = S,
+                 fill = Team,
+                 group = Player),
+             alpha = .2) +
+  # set plot theme
+  theme_classic() +
+  # set axis limits
+  scale_x_continuous(limits = c(0, 200)) +
+  scale_y_continuous(limits = c(0, 350)) +
+  # set axis titles
+  labs(x = 'Blocked Shots [Blk]',
+       y = 'Shots on Goal [S]')
+
+# convert plot to interactive
+plt_inter <- ggplotly(plt, tooltip = c('Team', 'Player', 'BLK', 'S')) %>%
+  # add hover highlight effect
+  highlight(on = 'plotly_hover',
+            off = 'plotly_deselect',
+            color = 'black') %>%
+  # remove legend
+  hide_legend() %>%
+  # add title and subtitle
+  layout(title = list(text = paste0('Individual and Team Shots and Blocks',
+                                    '<br>',
+                                    '<sup>',
+                                    'NHL 2021-22 season statistics (more than 10 games played) - Team averages shown in black',
+                                    '</sup>')))
+
+plt_inter
+
+# save plot as html widget
+saveWidget(as_widget(plt_inter), 'plt_inter.html')
+# save plot as R object
+save(plt_inter, file = 'plt_inter.rda')
+```
+
+## Discussion
+
+Data: The data for this plot were downloaded from as a .csv file from https://www.hockey-reference.com/leagues/NHL_2022_skaters.html using the 'Share & Export' tool. It contains basic hockey statistics for every player who played in the NHL during the 2021-22 regular season. However, only players who played at least 10 games this season were included in the above plot. A cleaned version of the downloaded .csv file is named players.csv and is saved in this folder. 
+  
+Intention: This plot was meant to loosely visualize NHL players' respective offensive and defensive abilities. On the x-axis, blocked shots are meant to simulate defensive presence and on the y-axis, shots on goal are meant to simulate offensive power. The plot was made interactive so that team trends and individual players would be easy to identify as the user hovers over points. Ultimately, I hope to convey with this plot an understanding of each NHL player's and team's offensive and defensive balance. 
+  
+Functionality: First, a simple theme was chosen to maximize the data:ink ratio of the plot. Next, individual player point were made largely transparent to avoid overlap and to emphasize the team average points. A tooltip was added to the plot to show name, team, shots, and blocks when hovering over a player point and team, average shots, and average blocks when hovering over a team point. A highlight key applied to both sets of points makes it so that when you hover over a team point, the individual points of players on that team are highlighted. This allows users to easily identify team distributions and outliers. Additionally, the user can use a zoom tool to adjust the plot axes to fit their specific needs. Finally, the team legend was removed due to its size, and a detailed title and subtitle were added to the plot. 
